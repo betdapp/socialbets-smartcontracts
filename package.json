@@ -13,12 +13,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@openzeppelin/buidler-upgrades": "^1.2.1",
     "@openzeppelin/contract-loader": "^0.6.2",
     "@openzeppelin/contracts": "^3.3.0",
     "@openzeppelin/contracts-ethereum-package": "^3.0.0",
     "@openzeppelin/contracts-upgradeable": "^3.3.0",
-    "@openzeppelin/hardhat-upgrades": "^1.4.1",
     "@openzeppelin/solidity-loader": "^1.5.1",
     "@openzeppelin/test-environment": "^0.1.8",
     "@openzeppelin/test-helpers": "^0.5.9",
