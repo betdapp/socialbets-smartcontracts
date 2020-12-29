@@ -7,5 +7,10 @@ build/
 
 # misc
 .idea/
+.vscode/
 npm-debug.log
 .DS_Store
+/.coverage_contracts
+/.coverage_artifacts
+/coverage
+/coverage.json
