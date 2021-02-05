@@ -32,28 +32,42 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
     }
 
     // Storage
+
     //betId => bet
     mapping(uint256 => Bet) public bets;
+
+    // user => active bets[]
     mapping(address => uint256[]) public firstPartyActiveBets;
+    // user => (betId => bet index in the active bets[])
     mapping(address => mapping(uint256 => uint256)) public firstPartyActiveBetsIndexes;
+    // user => active bets[]
     mapping(address => uint256[]) public secondPartyActiveBets;
+    // user => (betId => bet index in the active bets[])
     mapping(address => mapping(uint256 => uint256)) public secondPartyActiveBetsIndexes;
+    // user => active bets[]
     mapping(address => uint256[]) public mediatorActiveBets;
+    // user => (betId => bet index in the active bets[])
     mapping(address => mapping(uint256 => uint256)) public mediatorActiveBetsIndexes;
-    // Storage: Settings
-    uint256 public minBetValue;
-    // fee settings
-    uint256 public feePercentage;
+
+    // fee value collected fot the owner to withdraw
     uint256 public collectedFee;
-    uint256 public constant FEE_DECIMALS = 2;
-    uint256 public constant FEE_PERCENTAGE_DIVISION = 10000;
+
+    // Storage: Admin Settings
+    uint256 public minBetValue;
+    // bet creation fee
+    uint256 public feePercentage;
     // mediator settings
     address payable public defaultMediator;
     uint256 public defaultMediatorFee;
+    uint256 public mediationTimeLimit = 7 days;
+
+    // Constants
+    uint256 public constant FEE_DECIMALS = 2;
+    uint256 public constant FEE_PERCENTAGE_DIVISION = 10000;
     uint256 public constant MEDIATOR_FEE_DIVISION = 10000;
-    uint256 public constant MEDIATION_TIME_LIMIT = 7 days;
 
     // Events
+
     event NewBetCreated(
         uint256 indexed _betId,
         address indexed _firstParty,
@@ -102,12 +116,16 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
 
     // Modifiers
 
+    /**
+     * @dev Checks if bet exists in the bet mapping
+     */
     modifier onlyExistingBet(uint256 _betId) {
         require(isBetExists(_betId), "Bet doesn't exist");
         _;
     }
 
     /**
+     * @dev Checks is sender isn't contract
      * [IMPORTANT]
      * ====
      * This modifier will allow the following
@@ -124,78 +142,31 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
         _;
     }
 
-    //getters
+    // Getters
+
+    /**
+     * @dev Returns first party active bets
+     */
     function getFirstPartyActiveBets(address _firstParty) external view returns (uint256[] memory betsIds) {
         betsIds = firstPartyActiveBets[_firstParty];
     }
 
+    /**
+     * @dev Returns second party active bets
+     */
     function getSecondPartyActiveBets(address _secondParty) external view returns (uint256[] memory betsIds) {
         betsIds = secondPartyActiveBets[_secondParty];
     }
 
+    /**
+     * @dev Returns mediator active bets
+     */
     function getMediatorActiveBets(address _mediator) external view returns (uint256[] memory betsIds) {
         betsIds = mediatorActiveBets[_mediator];
     }
 
-    // Admin functionality
-
     /**
-     * @dev Set new min bet value
-     */
-    function setMinBetValue(uint256 _minBetValue) external onlyOwner {
-        minBetValue = _minBetValue;
-    }
-
-    /**
-     * @dev Set new fee percentage
-     */
-    function setFeePercentage(uint256 _feePercentage) external onlyOwner {
-        require(_feePercentage <= FEE_PERCENTAGE_DIVISION, "Bad fee");
-        feePercentage = _feePercentage;
-    }
-
-    /**
-     * @dev Set new default mediator fee
-     */
-    function setDefaultMediatorFee(uint256 _defaultMediatorFee) external onlyOwner {
-        require(_defaultMediatorFee <= MEDIATOR_FEE_DIVISION, "Bad mediator fee");
-        defaultMediatorFee = _defaultMediatorFee;
-    }
-
-    /**
-     * @dev Set new default mediator
-     */
-    function setDefaultMediator(address payable _defaultMediator) external onlyOwner {
-        require(_defaultMediator != address(0) && !_defaultMediator.isContract(), "Bad mediator");
-        defaultMediator = _defaultMediator;
-    }
-
-    /**
-     * @dev Pause the contract. This will disable new bet creation functionality
-     */
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    /**
-     * @dev Unpause the contract. This will enable new bet creation functionality
-     */
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
-    /**
-     * @dev Withdraws collected fee
-     */
-    function withdrawFee() external onlyOwner {
-        require(collectedFee > 0, "No fee to withdraw");
-        msg.sender.transfer(collectedFee);
-    }
-
-    // Utils
-
-    /**
-     * @dev Returns bet ID calculated from constant bet properties hash
+     * @dev Returns bet ID calculated from constant bet properties
      */
     function calculateBetId(
         string memory _metadata,
@@ -234,59 +205,74 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
     }
 
     /**
-     * @dev Add new active bet to mediator
+     * @dev Returns mediator fee value
      */
-    function addMediatorActiveBet(address _mediator, uint256 _betId) internal {
-        mediatorActiveBets[_mediator].push(_betId);
-        mediatorActiveBetsIndexes[_mediator][_betId] = mediatorActiveBets[_mediator].length.sub(1);
+    function calculateMediatorFee(uint256 _betId) public view returns (uint256 mediatorFeeValue) {
+        Bet storage bet = bets[_betId];
+        mediatorFeeValue = bet.firstBetValue.add(bet.secondBetValue).mul(bet.mediatorFee).div(MEDIATOR_FEE_DIVISION);
+    }
+
+    // Admin functionality
+
+    /**
+     * @dev Set new min bet value
+     */
+    function setMinBetValue(uint256 _minBetValue) external onlyOwner {
+        minBetValue = _minBetValue;
     }
 
     /**
-     * @dev Delete active bet from mediator's active bet's
+     * @dev Set new fee percentage
      */
-    function deleteMediatorActiveBet(address _mediator, uint256 _betId) internal {
-        if (mediatorActiveBets[_mediator].length == 0) return;
-        uint256 index = mediatorActiveBetsIndexes[_mediator][_betId];
-        delete mediatorActiveBetsIndexes[_mediator][_betId];
-        uint256 lastIndex = mediatorActiveBets[_mediator].length.sub(1);
-        if (lastIndex != index) {
-            uint256 movedBet = mediatorActiveBets[_mediator][lastIndex];
-            mediatorActiveBetsIndexes[_mediator][movedBet] = index;
-            mediatorActiveBets[_mediator][index] = mediatorActiveBets[_mediator][lastIndex];
-        }
-        mediatorActiveBets[_mediator].pop();
+    function setFeePercentage(uint256 _feePercentage) external onlyOwner {
+        require(_feePercentage <= FEE_PERCENTAGE_DIVISION, "Bad fee");
+        feePercentage = _feePercentage;
     }
 
     /**
-     * @dev Delete active bet from first partie's active bet's
+     * @dev Set new default mediator fee
      */
-    function deleteFirstPartyActiveBet(address _firstParty, uint256 _betId) internal {
-        if (firstPartyActiveBets[_firstParty].length == 0) return;
-        uint256 index = firstPartyActiveBetsIndexes[_firstParty][_betId];
-        delete firstPartyActiveBetsIndexes[_firstParty][_betId];
-        uint256 lastIndex = firstPartyActiveBets[_firstParty].length.sub(1);
-        if (lastIndex != index) {
-            uint256 movedBet = firstPartyActiveBets[_firstParty][lastIndex];
-            firstPartyActiveBetsIndexes[_firstParty][movedBet] = index;
-            firstPartyActiveBets[_firstParty][index] = firstPartyActiveBets[_firstParty][lastIndex];
-        }
-        firstPartyActiveBets[_firstParty].pop();
+    function setDefaultMediatorFee(uint256 _defaultMediatorFee) external onlyOwner {
+        require(_defaultMediatorFee <= MEDIATOR_FEE_DIVISION, "Bad mediator fee");
+        defaultMediatorFee = _defaultMediatorFee;
     }
 
     /**
-     * @dev Delete active bet from second partie's active bet's
+     * @dev Set new default mediator
      */
-    function deleteSecondPartyActiveBet(address _secondParty, uint256 _betId) internal {
-        if (secondPartyActiveBets[_secondParty].length == 0) return;
-        uint256 index = secondPartyActiveBetsIndexes[_secondParty][_betId];
-        delete secondPartyActiveBetsIndexes[_secondParty][_betId];
-        uint256 lastIndex = secondPartyActiveBets[_secondParty].length.sub(1);
-        if (lastIndex != index) {
-            uint256 movedBet = secondPartyActiveBets[_secondParty][lastIndex];
-            secondPartyActiveBetsIndexes[_secondParty][movedBet] = index;
-            secondPartyActiveBets[_secondParty][index] = secondPartyActiveBets[_secondParty][lastIndex];
-        }
-        secondPartyActiveBets[_secondParty].pop();
+    function setDefaultMediator(address payable _defaultMediator) external onlyOwner {
+        require(_defaultMediator != address(0) && !_defaultMediator.isContract(), "Bad mediator");
+        defaultMediator = _defaultMediator;
+    }
+
+    /**
+     * @dev Set new mediation time limit
+     */
+    function setMediationTimeLimit(uint256 _mediationTimeLimit) external onlyOwner {
+        require(_mediationTimeLimit > 0, "Bad mediationTimeLimit");
+        mediationTimeLimit = _mediationTimeLimit;
+    }
+
+    /**
+     * @dev Pause the contract. This will disable new bet creation functionality
+     */
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /**
+     * @dev Unpause the contract. This will enable new bet creation functionality
+     */
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    /**
+     * @dev Withdraws collected fee
+     */
+    function withdrawFee() external onlyOwner {
+        require(collectedFee > 0, "No fee to withdraw");
+        msg.sender.transfer(collectedFee);
     }
 
     // Users functionality
@@ -308,6 +294,7 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
         require(_firstBetValue >= minBetValue && _secondBetValue >= minBetValue, "Too small bet value");
         require(_secondPartyTimeframe > now, "2nd party timeframe < now");
         require(_resultTimeframe > now, "Result timeframe < now");
+        require(_resultTimeframe > _secondPartyTimeframe, "Result < 2nd party timeframe");
         require(
             msg.sender != _secondParty &&
                 msg.sender != _mediator &&
@@ -338,6 +325,7 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
             newBet.mediatorFee = defaultMediatorFee;
         } else {
             newBet.mediator = _mediator;
+            require(_mediatorFee <= MEDIATOR_FEE_DIVISION, "Bad mediator fee");
             newBet.mediatorFee = _mediatorFee;
         }
         newBet.firstBetValue = _firstBetValue;
@@ -396,18 +384,9 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
     }
 
     /**
-     * @dev Cancel bet if party 2 is late for participating
-     */
-    function party2TimeoutHandler(uint256 _betId) external onlyExistingBet(_betId) {
-        Bet storage bet = bets[_betId];
-        require(bet.state == BetStates.WaitingParty2, "Bet isn't waiting for party 2");
-        require(bet.secondPartyTimeframe <= now, "There is no timeout");
-        cancelBet(_betId, BetCancellationReasons.Party2Timeout);
-    }
-
-    /**
-     * @dev Sets an answer. If answer waiting time has expired then the one who set the answer wins.
-     *      If both didn't set the answer the bet cancels.
+     * @dev First and second partie's function for setting answer.
+     *      If answer waiting time has expired and nobody set the answer then bet cancels.
+     *      If one party didn't set the answer before timeframe the bet waits for mediator.
      */
     function vote(uint256 _betId, Answers _answer) external onlyExistingBet(_betId) {
         Bet storage bet = bets[_betId];
@@ -459,6 +438,41 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
         }
     }
 
+    /**
+     * @dev Mediator's setting an answer function. If mediating time has expired
+     *      then bet will be cancelled
+     */
+    function mediate(uint256 _betId, Answers _answer) external onlyExistingBet(_betId) {
+        Bet storage bet = bets[_betId];
+        require(_answer != Answers.Unset, "Wrong answer");
+        require(bet.state == BetStates.WaitingMediator, "Bet isn't waiting for mediator");
+        require(bet.mediator == msg.sender, "You can't mediate this bet");
+
+        if (now > bet.resultTimeframe && now.sub(bet.resultTimeframe) > mediationTimeLimit) {
+            cancelBet(_betId, BetCancellationReasons.MediatorTimeout);
+            return;
+        }
+
+        payToMediator(_betId);
+        finishBet(_betId, _answer, BetFinishReasons.MediatorFinished);
+    }
+
+    // Management handlers
+
+    /**
+     * @dev Checks secondPartyTimeframe. Cancels bet if party 2 is late for participating
+     */
+    function party2TimeoutHandler(uint256 _betId) external onlyExistingBet(_betId) {
+        Bet storage bet = bets[_betId];
+        require(bet.state == BetStates.WaitingParty2, "Bet isn't waiting for party 2");
+        require(bet.secondPartyTimeframe <= now, "There is no timeout");
+        cancelBet(_betId, BetCancellationReasons.Party2Timeout);
+    }
+
+    /**
+     * @dev Checks bet's resultTimeframe. If answer waiting time has expired and nobody set the answer then bet cancels.
+     *      If one party didn't set the answer before timeframe the bet waits for mediator.
+     */
     function votesTimeoutHandler(uint256 _betId) external onlyExistingBet(_betId) {
         Bet storage bet = bets[_betId];
         require(
@@ -481,44 +495,16 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
     }
 
     /**
-     * @dev Mediator participating function. If mediating time has expired
-     *      then bet will be cancelled
+     * @dev Checks mediator timeframe (resultTimeframe + mediationTimeLimit) and cancels bet if time has expired
      */
-    function mediate(uint256 _betId, Answers _answer) external onlyExistingBet(_betId) {
-        Bet storage bet = bets[_betId];
-        require(_answer != Answers.Unset, "Wrong answer");
-        require(bet.state == BetStates.WaitingMediator, "Bet isn't waiting for mediator");
-        require(bet.mediator == msg.sender, "You can't mediate this bet");
-
-        if (now > bet.resultTimeframe && now.sub(bet.resultTimeframe) > MEDIATION_TIME_LIMIT) {
-            cancelBet(_betId, BetCancellationReasons.MediatorTimeout);
-            return;
-        }
-
-        payToMediator(_betId);
-        finishBet(_betId, _answer, BetFinishReasons.MediatorFinished);
-    }
-
-    function payToMediator(uint256 _betId) internal {
-        Bet storage bet = bets[_betId];
-        uint256 value = calculateMediatorFee(_betId);
-        bet.mediator.transfer(value);
-    }
-
-    function calculateMediatorFee(uint256 _betId) public view returns (uint256 mediatorFeeValue) {
-        Bet storage bet = bets[_betId];
-        mediatorFeeValue = bet.firstBetValue.add(bet.secondBetValue).mul(bet.mediatorFee).div(MEDIATOR_FEE_DIVISION);
-    }
-
     function mediatorTimeoutHandler(uint256 _betId) external onlyExistingBet(_betId) {
         Bet storage bet = bets[_betId];
         require(bet.state == BetStates.WaitingMediator, "Bet isn't waiting for mediator");
-        require(
-            now > bet.resultTimeframe && now.sub(bet.resultTimeframe) > MEDIATION_TIME_LIMIT,
-            "There is no timeout"
-        );
+        require(now > bet.resultTimeframe && now.sub(bet.resultTimeframe) > mediationTimeLimit, "There is no timeout");
         cancelBet(_betId, BetCancellationReasons.MediatorTimeout);
     }
+
+    //Internals
 
     /**
      * @dev Finish bet and pay to the winner or cancel if tie
@@ -599,5 +585,70 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
         }
         emit Cancelled(_betId, _reason);
         emit Completed(firstParty, secondParty, mediator, _betId);
+    }
+
+    /**
+     * @dev Add new active bet to mediator
+     */
+    function addMediatorActiveBet(address _mediator, uint256 _betId) internal {
+        mediatorActiveBets[_mediator].push(_betId);
+        mediatorActiveBetsIndexes[_mediator][_betId] = mediatorActiveBets[_mediator].length.sub(1);
+    }
+
+    /**
+     * @dev Delete active bet from mediator's active bet's
+     */
+    function deleteMediatorActiveBet(address _mediator, uint256 _betId) internal {
+        if (mediatorActiveBets[_mediator].length == 0) return;
+        uint256 index = mediatorActiveBetsIndexes[_mediator][_betId];
+        delete mediatorActiveBetsIndexes[_mediator][_betId];
+        uint256 lastIndex = mediatorActiveBets[_mediator].length.sub(1);
+        if (lastIndex != index) {
+            uint256 movedBet = mediatorActiveBets[_mediator][lastIndex];
+            mediatorActiveBetsIndexes[_mediator][movedBet] = index;
+            mediatorActiveBets[_mediator][index] = mediatorActiveBets[_mediator][lastIndex];
+        }
+        mediatorActiveBets[_mediator].pop();
+    }
+
+    /**
+     * @dev Delete active bet from first partie's active bet's
+     */
+    function deleteFirstPartyActiveBet(address _firstParty, uint256 _betId) internal {
+        if (firstPartyActiveBets[_firstParty].length == 0) return;
+        uint256 index = firstPartyActiveBetsIndexes[_firstParty][_betId];
+        delete firstPartyActiveBetsIndexes[_firstParty][_betId];
+        uint256 lastIndex = firstPartyActiveBets[_firstParty].length.sub(1);
+        if (lastIndex != index) {
+            uint256 movedBet = firstPartyActiveBets[_firstParty][lastIndex];
+            firstPartyActiveBetsIndexes[_firstParty][movedBet] = index;
+            firstPartyActiveBets[_firstParty][index] = firstPartyActiveBets[_firstParty][lastIndex];
+        }
+        firstPartyActiveBets[_firstParty].pop();
+    }
+
+    /**
+     * @dev Delete active bet from second partie's active bet's
+     */
+    function deleteSecondPartyActiveBet(address _secondParty, uint256 _betId) internal {
+        if (secondPartyActiveBets[_secondParty].length == 0) return;
+        uint256 index = secondPartyActiveBetsIndexes[_secondParty][_betId];
+        delete secondPartyActiveBetsIndexes[_secondParty][_betId];
+        uint256 lastIndex = secondPartyActiveBets[_secondParty].length.sub(1);
+        if (lastIndex != index) {
+            uint256 movedBet = secondPartyActiveBets[_secondParty][lastIndex];
+            secondPartyActiveBetsIndexes[_secondParty][movedBet] = index;
+            secondPartyActiveBets[_secondParty][index] = secondPartyActiveBets[_secondParty][lastIndex];
+        }
+        secondPartyActiveBets[_secondParty].pop();
+    }
+
+    /**
+     * @dev Transfers mediator fee to the mediator
+     */
+    function payToMediator(uint256 _betId) internal {
+        Bet storage bet = bets[_betId];
+        uint256 value = calculateMediatorFee(_betId);
+        bet.mediator.transfer(value);
     }
 }

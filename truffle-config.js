@@ -50,11 +50,18 @@ module.exports = {
       gasPrice: 1 // 20 gwei (in wei) (default: 100 gwei)
     },
     rinkeby: {
-      provider: () => new HDWalletProvider(process.env.PRIVATE_KEY, 'https://rinkeby.infura.io/v3/ef306a43234747eb9c087e5301ed9363'),
+      provider: () => new HDWalletProvider(process.env.PRIVATE_KEY, 'https://rinkeby.infura.io/v3/a0bb216866fa4c4fa318eaddffc02eb6'),
+      networkId: 4,       // Rinkeby's id
       network_id: 4,
-      gas: 10000000,
-      // gasPrice: 20000000000,  // 20 gwei (in wei) (default: 100 gwei)
-      skipDryRun: true
+      gasPrice: process.env.GAS_PRICE,
+      gas: 3550262
+    },
+    mainnet: {
+      provider: () => new HDWalletProvider(process.env.PRIVATE_KEY, "https://mainnet.infura.io/v3/a0bb216866fa4c4fa318eaddffc02eb6"),
+      networkId: 1,       // Mainnet's id
+      network_id: 1,
+      gas: 3550262,
+      gasPrice: process.env.GAS_PRICE,
     },
     // Another network with more advanced options...
     // advanced: {
@@ -97,7 +104,7 @@ module.exports = {
       settings: { // See the solidity docs for advice about optimization and evmVersion
         optimizer: {
           enabled: true,
-          runs: 1000
+          runs: 200
         },
         //  evmVersion: "byzantium"
       }

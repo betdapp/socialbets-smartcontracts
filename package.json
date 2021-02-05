@@ -7,7 +7,8 @@
     "test": "npx truffle test ",
     "compile": "npx truffle compile ",
     "migrate": "npx truffle migrate ",
-    "dev:coverage": "npx truffle run coverage"
+    "dev:coverage": "npx truffle run coverage",
+    "flatten":"node ./flatten.js > SocialBets.json"
   },
   "repository": {
     "type": "git",
@@ -23,6 +24,8 @@
   },
   "devDependencies": {
     "@openzeppelin/test-helpers": "^0.5.9",
+    "@resolver-engine/imports": "^0.3.3",
+    "@resolver-engine/imports-fs": "^0.3.3",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
     "chai-bn": "^0.2.1",

@@ -15,7 +15,7 @@ const assert = require('assert').strict;
 const SocialBets = artifacts.require("SocialBets");
 const CallSocialBets = artifacts.require("CallSocialBets");
 
-contract("Socials Bets decision making functionality test", async accounts => {
+contract("Socials Bets", async accounts => {
 
     const [owner, firstParty, secondParty, publicSecondParty, mediator, defaultMediator, thirdParty] = accounts;
     const FEE_PERCENTAGE_DIVISION = new BN(`10000`);
@@ -239,6 +239,16 @@ contract("Socials Bets decision making functionality test", async accounts => {
             await expectRevert(socialBetsInstance.withdrawFee(), "No fee to withdraw");
         })
 
+        it(`Admin can set mediation time limit`, async () => {
+            let mediationTimeLimit = time.duration.days(3);
+            await socialBetsInstance.setMediationTimeLimit(mediationTimeLimit);
+            (await socialBetsInstance.mediationTimeLimit()).should.bignumber.equal(mediationTimeLimit);
+        });
+
+        it(`Admin can't set mediation time limit to zero address`, async () => {
+            let mediationTimeLimit = new BN(`0`);
+            await expectRevert(socialBetsInstance.setMediationTimeLimit(mediationTimeLimit),"Bad mediationTimeLimit");
+        });
     });
 
     describe(`Bet creation test`, async () => {
@@ -1022,6 +1032,88 @@ contract("Socials Bets decision making functionality test", async accounts => {
             (bet.firstParty).should.equal(constants.ZERO_ADDRESS);
         });
 
+        it("First party can't create bet with result timeframe earlier than 2nd party timeframe", async () => {
+            const metadata = "some metadata";
+            const firstPartyAddr = firstParty;
+            const secondPartyAddr = constants.ZERO_ADDRESS;
+            const mediatorAddr = defaultMediator;
+            const firstBetValue = ether('0.5');
+            const secondBetValue = ether(`1.5`);
+            const mediatorFee = new BN(`300`);
+            const secondPartyTimeframe = (await getCurrentTimestamp()).add(duration.days(5));
+            const resultTimeframe = secondPartyTimeframe.subn(1);
+
+            const fee = await socialBetsInstance.calculateFee(firstBetValue, secondBetValue);
+            await expectRevert(socialBetsInstance.createBet(
+                metadata,
+                secondPartyAddr,
+                constants.ZERO_ADDRESS,
+                new BN(`0`),
+                firstBetValue,
+                secondBetValue,
+                secondPartyTimeframe,
+                resultTimeframe, {
+                    from: firstPartyAddr,
+                    value: firstBetValue.add(fee)
+                }
+            ), "Result < 2nd party timeframe");
+
+
+            const betId = await socialBetsInstance.calculateBetId(
+                metadata,
+                firstPartyAddr,
+                firstBetValue,
+                secondBetValue,
+                secondPartyTimeframe,
+                resultTimeframe
+            );
+
+            const bet = await socialBetsInstance.bets(betId);
+            (bet.firstParty).should.equal(constants.ZERO_ADDRESS);
+        });
+
+        it("First party can't create bet with mediator fee greater than MEDIATOR_FEE_DIVISION", async () => {
+            const metadata = "some metadata";
+            const firstPartyAddr = firstParty;
+            const secondPartyAddr = secondParty;
+            const mediatorAddr = mediator;
+
+            const firstBetValue = ether(`0.5`);
+            const secondBetValue = ether(`1.5`);
+            const mediatorFee = MEDIATOR_FEE_DIVISION.addn(1);
+            const secondPartyTimeframe = (await getCurrentTimestamp()).add(duration.days(5));
+            const resultTimeframe = (await getCurrentTimestamp()).add(duration.days(10));
+
+            const fee = await socialBetsInstance.calculateFee(firstBetValue, secondBetValue);
+            await expectRevert(socialBetsInstance.createBet(
+                metadata,
+                secondPartyAddr,
+                mediatorAddr,
+                mediatorFee,
+                firstBetValue,
+                secondBetValue,
+                secondPartyTimeframe,
+                resultTimeframe, {
+                    from: firstPartyAddr,
+                    value: firstBetValue.add(fee)
+                }
+            ), "Bad mediator fee");
+
+
+            const betId = await socialBetsInstance.calculateBetId(
+                metadata,
+                firstPartyAddr,
+                firstBetValue,
+                secondBetValue,
+                secondPartyTimeframe,
+                resultTimeframe
+            );
+
+            const bet = await socialBetsInstance.bets(betId);
+            (bet.firstParty).should.equal(constants.ZERO_ADDRESS);
+
+        });
+
         it("First party can't create bet that is already exists", async () => {
             const metadata = "some metadata";
             const firstPartyAddr = firstParty;
@@ -1132,6 +1224,7 @@ contract("Socials Bets decision making functionality test", async accounts => {
             // create second bet
             metadata = "some metadata2";
             secondPartyTimeframe = (await getCurrentTimestamp()).add(duration.days(10));
+            resultTimeframe = (await getCurrentTimestamp()).add(duration.days(15));
             await socialBetsInstance.createBet(
                 metadata,
                 secondPartyAddr,
@@ -1453,6 +1546,8 @@ contract("Socials Bets decision making functionality test", async accounts => {
             // create second bet
             metadata = "some metadata2";
             secondPartyTimeframe = (await getCurrentTimestamp()).add(duration.days(10));
+            resultTimeframe = (await getCurrentTimestamp()).add(duration.days(15));
+
             await socialBetsInstance.createBet(
                 metadata,
                 secondPartyAddr,
@@ -1781,6 +1876,7 @@ contract("Socials Bets decision making functionality test", async accounts => {
             // create second bet
             metadata = "some metadata2";
             secondPartyTimeframe = (await getCurrentTimestamp()).add(duration.days(10));
+            resultTimeframe = (await getCurrentTimestamp()).add(duration.days(15));
             await socialBetsInstance.createBet(
                 metadata,
                 secondPartyAddr,
