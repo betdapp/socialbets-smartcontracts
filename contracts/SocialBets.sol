@@ -272,7 +272,10 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
      */
     function withdrawFee() external onlyOwner {
         require(collectedFee > 0, "No fee to withdraw");
-        msg.sender.transfer(collectedFee);
+        uint256 callValue = collectedFee;
+        collectedFee = 0;
+        (bool success, ) = msg.sender.call{value:callValue}("");
+        require(success, "Transfer failed");
     }
 
     // Users functionality
@@ -379,7 +382,8 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
         } else {
             success = false;
             cancelBet(_betId, BetCancellationReasons.Party2Timeout);
-            msg.sender.transfer(msg.value);
+            (bool transferSuccess, ) = msg.sender.call{value: msg.value}("");
+            require(transferSuccess, "Transfer failed");
         }
     }
 
@@ -545,7 +549,8 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
         deleteFirstPartyActiveBet(firstParty, _betId);
         deleteSecondPartyActiveBet(secondParty, _betId);
 
-        winner.transfer(firstBetValue.add(secondBetValue).sub(mediatorFeeValue));
+        (bool success, ) = winner.call{value: firstBetValue.add(secondBetValue).sub(mediatorFeeValue)}("");
+        require(success, "Transfer failed");
         emit Finished(_betId, winner, _reason, firstBetValue.add(secondBetValue).sub(mediatorFeeValue));
         emit Completed(firstParty, secondParty, mediator, _betId);
     }
@@ -575,12 +580,15 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
         delete bets[_betId];
         uint256 firstPartyMediatorFeeValue = mediatorFeeValue.div(2);
 
-        firstParty.transfer(firstBetValue.sub(firstPartyMediatorFeeValue));
-
+        (bool success, ) = firstParty.call{value: firstBetValue.sub(firstPartyMediatorFeeValue)}("");
+        require(success, "Transfer failed");
         deleteFirstPartyActiveBet(firstParty, _betId);
 
         if (isSecondPartyParticipating) {
-            secondParty.transfer(secondBetValue.sub(mediatorFeeValue.sub(firstPartyMediatorFeeValue)));
+            (success, ) = secondParty.call{value: secondBetValue.sub(mediatorFeeValue.sub(firstPartyMediatorFeeValue))}(
+                ""
+            );
+            require(success, "Transfer failed");
             deleteSecondPartyActiveBet(secondParty, _betId);
         }
         emit Cancelled(_betId, _reason);
@@ -649,6 +657,7 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
     function payToMediator(uint256 _betId) internal {
         Bet storage bet = bets[_betId];
         uint256 value = calculateMediatorFee(_betId);
-        bet.mediator.transfer(value);
+        (bool success, ) = bet.mediator.call{value: value}("");
+        require(success, "Transfer failed");
     }
 }

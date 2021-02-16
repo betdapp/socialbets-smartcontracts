@@ -229,12 +229,21 @@ contract("Socials Bets", async accounts => {
                 }
             );
 
+            const collectedBefore = await socialBetsInstance.collectedFee();
+
             const ownerTracker = await balance.tracker(owner);
             let res = await socialBetsInstance.withdrawFee();
             const gasUsed = new BN(res.receipt.gasUsed);
-            (await ownerTracker.delta()).should.bignumber.equal(fee.sub(gasUsed));
+
+            const collectedAfter = await socialBetsInstance.collectedFee();
+            collectedAfter.should.bignumber.equal(new BN(`0`));
+
+            const delta = await ownerTracker.delta();
+            delta.should.bignumber.equal(fee.sub(gasUsed));
+            delta.should.bignumber.equal(collectedBefore.sub(gasUsed));
 
         })
+
         it(`Admin can't withdraw zero fee`, async () => {
             await expectRevert(socialBetsInstance.withdrawFee(), "No fee to withdraw");
         })
