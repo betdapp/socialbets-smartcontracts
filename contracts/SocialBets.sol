@@ -392,7 +392,7 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
      *      If answer waiting time has expired and nobody set the answer then bet cancels.
      *      If one party didn't set the answer before timeframe the bet waits for mediator.
      */
-    function vote(uint256 _betId, Answers _answer) external onlyExistingBet(_betId) {
+    function vote(uint256 _betId, Answers _answer) external nonReentrant onlyExistingBet(_betId) {
         Bet storage bet = bets[_betId];
 
         require(_answer != Answers.Unset, "Wrong answer");
@@ -446,7 +446,7 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
      * @dev Mediator's setting an answer function. If mediating time has expired
      *      then bet will be cancelled
      */
-    function mediate(uint256 _betId, Answers _answer) external onlyExistingBet(_betId) {
+    function mediate(uint256 _betId, Answers _answer) external nonReentrant onlyNotContract onlyExistingBet(_betId) {
         Bet storage bet = bets[_betId];
         require(_answer != Answers.Unset, "Wrong answer");
         require(bet.state == BetStates.WaitingMediator, "Bet isn't waiting for mediator");
@@ -466,7 +466,7 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
     /**
      * @dev Checks secondPartyTimeframe. Cancels bet if party 2 is late for participating
      */
-    function party2TimeoutHandler(uint256 _betId) external onlyExistingBet(_betId) {
+    function party2TimeoutHandler(uint256 _betId) external nonReentrant onlyExistingBet(_betId) {
         Bet storage bet = bets[_betId];
         require(bet.state == BetStates.WaitingParty2, "Bet isn't waiting for party 2");
         require(bet.secondPartyTimeframe <= now, "There is no timeout");
@@ -477,7 +477,7 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
      * @dev Checks bet's resultTimeframe. If answer waiting time has expired and nobody set the answer then bet cancels.
      *      If one party didn't set the answer before timeframe the bet waits for mediator.
      */
-    function votesTimeoutHandler(uint256 _betId) external onlyExistingBet(_betId) {
+    function votesTimeoutHandler(uint256 _betId) external nonReentrant onlyExistingBet(_betId) {
         Bet storage bet = bets[_betId];
         require(
             bet.state == BetStates.WaitingFirstVote || bet.state == BetStates.WaitingSecondVote,
@@ -501,7 +501,7 @@ contract SocialBets is Ownable, Pausable, ReentrancyGuard {
     /**
      * @dev Checks mediator timeframe (resultTimeframe + mediationTimeLimit) and cancels bet if time has expired
      */
-    function mediatorTimeoutHandler(uint256 _betId) external onlyExistingBet(_betId) {
+    function mediatorTimeoutHandler(uint256 _betId) external nonReentrant onlyExistingBet(_betId) {
         Bet storage bet = bets[_betId];
         require(bet.state == BetStates.WaitingMediator, "Bet isn't waiting for mediator");
         require(now > bet.resultTimeframe && now.sub(bet.resultTimeframe) > mediationTimeLimit, "There is no timeout");
